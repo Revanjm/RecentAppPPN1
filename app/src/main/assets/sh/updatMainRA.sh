@@ -1,22 +1,35 @@
+#!/bin/bash
+
 DB_PATH="/storage/emulated/0/.recentappppn1/.db/main.db"
 
-if [ ! -f "$DB_PATH" ]; then
-    exit 1
-fi
+# Проверяем наличие базы данных
+[ ! -f "$DB_PATH" ] && exit 1
 
-recent_apps=$(dumpsys activity recents | grep -E 'A=|I=' | sed -E 's/.*A=[0-9]+://;s/.*I=//;s/Task\{[0-9a-f]+ //;s/\}//')
+# Получаем список скрытых задач (mHiddenTasks)
+hidden_tasks=$(dumpsys activity | awk '/mHiddenTasks=/{print $0}' | tr -d '[]' | sed 's/mHiddenTasks=//g')
 
+# Получаем список недавних приложений, исключая те, что находятся в hidden_tasks
+recent_apps=$(dumpsys activity recents | awk '/A=|I=/{print $0}' | sed -E 's/.*A=[0-9]+://;s/.*I=//;s/Task\{[0-9a-f]+ //;s/\}//' | grep -vF "$hidden_tasks" | grep -vE 'com\.miui\.home|com\.ppnapptest\.quickpanel1' | sed 's/[^a-zA-Z\/\.]//g')
+
+# Убедимся, что полученные значения recent_apps соответствуют формату пакетов
+recent_apps=$(echo "$recent_apps" | grep -E '^[a-zA-Z0-9]+\.[a-zA-Z0-9\.]+$')
+
+# Преобразуем recent_apps в массив
 apps_array=($(echo "$recent_apps" | tr '\n' ' '))
 
-filtered_apps=()
-for app in "${apps_array[@]}"; do
-  if [[ "$app" != "com.ppnapptest.quickpanel1/.MainActivity" && "$app" != "com.miui.home/.launcher.Launcher" ]]; then
-    filtered_apps+=("$app")
-  fi
+# Добавляем "NULL" для недостающих значений до 30 элементов
+while [ "${#apps_array[@]}" -lt 30 ]; do
+  apps_array+=("NULL")
 done
 
-for i in {${#filtered_apps[@]}..29}; do
-    filtered_apps+=("NULL")
-done
+# Убедимся, что таблица обновляется для id = 1
+sqlite3 "$DB_PATH" <<EOF
+BEGIN TRANSACTION;
 
-sqlite3 "$DB_PATH" "DELETE FROM main; INSERT INTO main (ra1, ra2, ra3, ra4, ra5, ra6, ra7, ra8, ra9, ra10, ra11, ra12, ra13, ra14, ra15, ra16, ra17, ra18, ra19, ra20, ra21, ra22, ra23, ra24, ra25, ra26, ra27, ra28, ra29, ra30) VALUES ('${filtered_apps[0]}', '${filtered_apps[1]}', '${filtered_apps[2]}', '${filtered_apps[3]}', '${filtered_apps[4]}', '${filtered_apps[5]}', '${filtered_apps[6]}', '${filtered_apps[7]}', '${filtered_apps[8]}', '${filtered_apps[9]}', '${filtered_apps[10]}', '${filtered_apps[11]}', '${filtered_apps[12]}', '${filtered_apps[13]}', '${filtered_apps[14]}', '${filtered_apps[15]}', '${filtered_apps[16]}', '${filtered_apps[17]}', '${filtered_apps[18]}', '${filtered_apps[19]}', '${filtered_apps[20]}', '${filtered_apps[21]}', '${filtered_apps[22]}', '${filtered_apps[23]}', '${filtered_apps[24]}', '${filtered_apps[25]}', '${filtered_apps[26]}', '${filtered_apps[27]}', '${filtered_apps[28]}', '${filtered_apps[29]}');"
+-- Обновляем значения в строке с id = 1
+UPDATE main
+SET ra1 = '${apps_array[0]}', ra2 = '${apps_array[1]}', ra3 = '${apps_array[2]}', ra4 = '${apps_array[3]}', ra5 = '${apps_array[4]}', ra6 = '${apps_array[5]}', ra7 = '${apps_array[6]}', ra8 = '${apps_array[7]}', ra9 = '${apps_array[8]}', ra10 = '${apps_array[9]}', ra11 = '${apps_array[10]}', ra12 = '${apps_array[11]}', ra13 = '${apps_array[12]}', ra14 = '${apps_array[13]}', ra15 = '${apps_array[14]}', ra16 = '${apps_array[15]}', ra17 = '${apps_array[16]}', ra18 = '${apps_array[17]}', ra19 = '${apps_array[18]}', ra20 = '${apps_array[19]}', ra21 = '${apps_array[20]}', ra22 = '${apps_array[21]}', ra23 = '${apps_array[22]}', ra24 = '${apps_array[23]}', ra25 = '${apps_array[24]}', ra26 = '${apps_array[25]}', ra27 = '${apps_array[26]}', ra28 = '${apps_array[27]}', ra29 = '${apps_array[28]}', ra30 = '${apps_array[29]}'
+WHERE id = 1;
+
+COMMIT;
+EOF

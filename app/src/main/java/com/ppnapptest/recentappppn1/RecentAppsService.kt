@@ -65,7 +65,7 @@ class RecentAppsService : Service() {
                         Toast.makeText(this@RecentAppsService, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
-                delay(3000L)
+                delay(500L)
             }
         }
     }
