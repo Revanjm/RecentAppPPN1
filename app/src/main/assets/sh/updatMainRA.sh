@@ -2,34 +2,62 @@
 
 DB_PATH="/storage/emulated/0/.recentappppn1/.db/main.db"
 
-# Проверяем наличие базы данных
-[ ! -f "$DB_PATH" ] && exit 1
+# Проверяем, существует ли база данных
+if [ ! -f "$DB_PATH" ]; then
+    exit 1
+fi
 
-# Получаем список скрытых задач (mHiddenTasks)
-hidden_tasks=$(dumpsys activity | awk '/mHiddenTasks=/{print $0}' | tr -d '[]' | sed 's/mHiddenTasks=//g')
+# Начало измерения времени
+start_time=$(date +%s%3N)
 
-# Получаем список недавних приложений, исключая те, что находятся в hidden_tasks
-recent_apps=$(dumpsys activity recents | awk '/A=|I=/{print $0}' | sed -E 's/.*A=[0-9]+://;s/.*I=//;s/Task\{[0-9a-f]+ //;s/\}//' | grep -vF "$hidden_tasks" | grep -vE 'com\.miui\.home|com\.ppnapptest\.quickpanel1' | sed 's/[^a-zA-Z\/\.]//g')
+# Сразу получаем данные из dumpsys activity, исключая hidden tasks
+dumpsys_output=$(dumpsys activity | grep -A 100 "Recent tasks" | grep -E 'A=|I=' | grep -vF "$(dumpsys activity | grep 'mHiddenTasks=' | sed 's/mHiddenTasks=//' | tr -d '[]')")
 
-# Убедимся, что полученные значения recent_apps соответствуют формату пакетов
-recent_apps=$(echo "$recent_apps" | grep -E '^[a-zA-Z0-9]+\.[a-zA-Z0-9\.]+$')
+# Обрабатываем данные для recent_apps
+recent_apps=$(echo "$dumpsys_output" | sed -E 's/.*A=[0-9]+://;s/.*I=//;s/Task\{[0-9a-f]+ //;s/\}//' | grep -vE 'com\.miui\.home|com\.ppnapptest\.quickpanel1' | sed 's/[^a-zA-Z\/\.]//g')
 
-# Преобразуем recent_apps в массив
-apps_array=($(echo "$recent_apps" | tr '\n' ' '))
+# Отбор неправильных форматов приложений
+invalid_apps=$(echo "$recent_apps" | grep -vE '^[a-zA-Z0-9]+\.[a-zA-Z0-9\.]+$')
 
-# Добавляем "NULL" для недостающих значений до 30 элементов
-while [ "${#apps_array[@]}" -lt 30 ]; do
-  apps_array+=("NULL")
+# Если есть приложения с неверным форматом, получаем правильные пакеты
+if [ -n "$invalid_apps" ]; then
+  replacement=$(su -c "dumpsys package | grep -B 20 \"/$invalid_apps\" | grep -oE '[^ ]+/$invalid_apps' | cut -d '/' -f 1 | sort | uniq")
+fi
+
+# Обновляем список приложений, заменяя неправильные на правильные пакеты
+recent_app_cl="$recent_apps"
+if [ -n "$invalid_apps" ] && [ -n "$replacement" ]; then
+  recent_app_cl=$(echo "$recent_apps" | sed "s|$invalid_apps|$replacement|g")
+fi
+
+# Преобразуем список приложений в массив
+apps_array=($(echo "$recent_app_cl" | tr '\n' ' '))
+
+columns="id"
+values="1"
+
+# Создаем список колонок и значений для записи в базу данных
+for i in "${!apps_array[@]}"; do
+    column_name="ra$(($i + 1))"
+    columns+=", $column_name"
+    value="${apps_array[$i]}"
+    values+=", \"$value\""
 done
 
-# Убедимся, что таблица обновляется для id = 1
+
+# Выполняем SQLite команду
 sqlite3 "$DB_PATH" <<EOF
+PRAGMA journal_mode = MEMORY;
 BEGIN TRANSACTION;
-
--- Обновляем значения в строке с id = 1
-UPDATE main
-SET ra1 = '${apps_array[0]}', ra2 = '${apps_array[1]}', ra3 = '${apps_array[2]}', ra4 = '${apps_array[3]}', ra5 = '${apps_array[4]}', ra6 = '${apps_array[5]}', ra7 = '${apps_array[6]}', ra8 = '${apps_array[7]}', ra9 = '${apps_array[8]}', ra10 = '${apps_array[9]}', ra11 = '${apps_array[10]}', ra12 = '${apps_array[11]}', ra13 = '${apps_array[12]}', ra14 = '${apps_array[13]}', ra15 = '${apps_array[14]}', ra16 = '${apps_array[15]}', ra17 = '${apps_array[16]}', ra18 = '${apps_array[17]}', ra19 = '${apps_array[18]}', ra20 = '${apps_array[19]}', ra21 = '${apps_array[20]}', ra22 = '${apps_array[21]}', ra23 = '${apps_array[22]}', ra24 = '${apps_array[23]}', ra25 = '${apps_array[24]}', ra26 = '${apps_array[25]}', ra27 = '${apps_array[26]}', ra28 = '${apps_array[27]}', ra29 = '${apps_array[28]}', ra30 = '${apps_array[29]}'
-WHERE id = 1;
-
+DELETE FROM main WHERE id = 1;
+INSERT INTO main ($columns)
+VALUES ($values);
 COMMIT;
 EOF
+
+# Окончание измерения времени
+end_time=$(date +%s%3N)
+execution_time=$((end_time - start_time))
+
+# Финальный вывод после завершения скрипта
+echo "Время выполнения скрипта: $execution_time мс"
