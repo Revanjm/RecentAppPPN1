@@ -81,7 +81,7 @@ class MainActivity : AppCompatActivity() {
     private fun startAutoUpdate() {
         lifecycleScope.launch {
             while (true) {
-                delay(500)  // Задержка 3 секунды
+                delay(50)  // Задержка 3 секунды
                 viewModel.updateRecentApps()  // Обновление данных
             }
         }

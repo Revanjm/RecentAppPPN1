@@ -13,8 +13,7 @@ import kotlinx.coroutines.*
 class RecentAppsService : Service() {
 
     private lateinit var repository: RecentAppsRepository
-    private var scriptJob: Job? = null
-    private var updateJob: Job? = null
+    private var job: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onCreate() {
@@ -31,13 +30,12 @@ class RecentAppsService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startExecutingCommand()
         startUpdatingRecentApps()
         return START_STICKY
     }
 
-    private fun startExecutingCommand() {
-        scriptJob = serviceScope.launch(Dispatchers.IO) {
+    private fun startUpdatingRecentApps() {
+        job = serviceScope.launch(Dispatchers.IO) {
             while (isActive) {
                 try {
                     val shell = Shell.getShell()
@@ -47,6 +45,7 @@ class RecentAppsService : Service() {
                         if (result.isSuccess) {
                             Log.d("RecentAppsService", "Скрипт успешно выполнен")
                             repository.updateRecentApps()
+                            delay(500L)
                         } else {
                             Log.e("RecentAppsService", "Ошибка выполнения скрипта: ${result.code} - ${result.err}")
                             withContext(Dispatchers.Main) {
@@ -65,24 +64,13 @@ class RecentAppsService : Service() {
                         Toast.makeText(this@RecentAppsService, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
-                delay(500L)
-            }
-        }
-    }
-
-    private fun startUpdatingRecentApps() {
-        updateJob = serviceScope.launch {
-            while (isActive) {
-                repository.updateRecentApps()
-                delay(1000L)
             }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        scriptJob?.cancel()
-        updateJob?.cancel()
+        job?.cancel()
         serviceScope.cancel()
         Toast.makeText(this, "Сервис RecentAppsService завершён", Toast.LENGTH_SHORT).show()
     }
